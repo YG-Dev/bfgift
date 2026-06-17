@@ -136,8 +136,10 @@
         heroSubtitle: "From your favorite chaos gremlin and all our friends 💜",
         kioraMessage:
           "Hey Fifi ! Thank you for being our wonderful friend ! This is the least we can do for you in this special day ! Hope you will like this little gift 🎁",
+        bgMusicLoop: false,
         bgMusicUrl: "./assets/sx_bg_music.mp3",
         envelopeOpenSfx: "./assets/sx_envelope_open.mp3",
+        clickNoSfx: "./assets/sx_no_click.mp3",
         clickYesSfx: "./assets/sx_yes_click.mp3",
 
         // Friends wishes block - supporting optional voice recording tracks
@@ -238,12 +240,6 @@
             description: "A beautiful art from Jin",
             urls: ["./assets/jin_pic_1.png"],
           },
-          {
-            type: "image",
-            title: "Very cool Fifi and his friends 🎨",
-            description: "A beautiful art from Tatsu",
-            urls: [],
-          },
         ],
       };
     </script>
@@ -308,10 +304,7 @@
           ></p>
 
           <button
-            onclick="
-              startBackgroundMusic();
-              nextSection();
-            "
+            onclick="nextSection()"
             class="px-8 py-4 bg-white text-black font-bold rounded-2xl text-lg hover:bg-purple-400 hover:text-white transition-all hover:scale-105 active:scale-95 flex items-center gap-3 mx-auto shadow-lg shadow-purple-500/10"
           >
             <span>Begin the Journey</span>
@@ -358,7 +351,10 @@
         ></div>
 
         <button
-          onclick="nextSection()"
+          onclick="
+            stopInitialMusic();
+            nextSection();
+          "
           class="mt-10 px-8 py-4 bg-white/90 text-black font-bold rounded-2xl text-lg hover:bg-purple-400 hover:text-white transition-all hover:scale-105 active:scale-95 flex items-center gap-3 mx-auto shadow-md"
         >
           <span>See What Friends Wrote</span>
@@ -570,30 +566,45 @@
       let currentCarouselIndex = 0;
       let backgroundAudio = null;
 
-      function startBackgroundMusic() {
-        // Instantiate background audio asset tracking loop safely if not already assigned
-        if (!backgroundAudio && CONFIG.bgMusicUrl) {
+      // Kicks off the tracking sound instantly on loading screen stages
+      function startInitialMusic() {
+        if (CONFIG.bgMusicUrl) {
           backgroundAudio = new Audio(CONFIG.bgMusicUrl);
-          backgroundAudio.loop = true;
-          backgroundAudio.volume = 0.4; // 40% ambient backing stream volume balance
-          backgroundAudio
-            .play()
-            .catch((err) => console.log("Music track failure:", err));
+          backgroundAudio.loop = CONFIG.bgMusicLoop; // Follows the 'false' setting (no repeating)
+          backgroundAudio.volume = 0.5;
 
-          // Track when individual friend voice messages are playing to dim ambient backing track
-          const friendVoicePlayer =
-            document.getElementById("modal-audio-player");
-          if (friendVoicePlayer) {
-            friendVoicePlayer.onplay = () => {
-              backgroundAudio.volume = 0.15;
-            }; // Dim background music
-            friendVoicePlayer.onpause = () => {
-              backgroundAudio.volume = 0.4;
-            }; // Restore volume
-            friendVoicePlayer.onended = () => {
-              backgroundAudio.volume = 0.4;
-            };
-          }
+          backgroundAudio.play();
+          setTimeout(() => {
+            console.log("should play");
+            backgroundAudio.play();
+          }, 500);
+
+          // Attempt to play immediately, or fall back gracefully if browser demands a click first
+          backgroundAudio.play().catch(() => {
+            window.addEventListener(
+              "click",
+              () => {
+                if (
+                  backgroundAudio &&
+                  backgroundAudio.paused &&
+                  activeSectionIndex === 0
+                ) {
+                  backgroundAudio.play();
+                }
+              },
+              { once: true },
+            ); // Triggers on her very first interaction
+          });
+        }
+      }
+
+      // Completely stops and cleans up the audio track
+      function stopInitialMusic() {
+        if (backgroundAudio) {
+          backgroundAudio.pause();
+          backgroundAudio.currentTime = 0; // Rewind memory buffer
+          backgroundAudio.src = ""; // Flush file link completely
+          backgroundAudio = null; // Destroy reference
         }
       }
 
@@ -649,9 +660,8 @@
             );
         }
 
-        document.getElementById("modal-sender").textContent =
-          `From: ${msg.from}`;
-        document.getElementById("modal-text").textContent = msg.text;
+        document.getElementById("modal-sender").innerHTML = `From: ${msg.from}`;
+        document.getElementById("modal-text").innerHTML = msg.text;
         document.getElementById("modal-emoji").textContent = msg.emoji || "✉️";
 
         if (msg.audioUrl && msg.audioUrl.trim() !== "") {
@@ -879,6 +889,12 @@
           noBtn.style.transform = "scale(1)";
           noBtn.style.opacity = "1";
         } else {
+          if (CONFIG.clickNoSfx) {
+            const ewSound = new Audio(CONFIG.clickNoSfx);
+            ewSound.volume = 0.6; // 60% standard volume
+            ewSound.play().catch((e) => console.log("Audio play blocked:", e));
+          }
+
           runningNoCount++;
           output.className =
             "mt-8 text-xl font-bold text-purple-400 animate__animated animate__shakeX";
@@ -945,6 +961,8 @@
         renderStaticText();
         renderMessages();
         renderGallery();
+
+        startInitialMusic();
 
         setInterval(() => {
           const hero = document.getElementById("sec-hero");
